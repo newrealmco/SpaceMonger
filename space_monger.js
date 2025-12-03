@@ -30,7 +30,6 @@ let level = 1;
 let levelText;
 let lives = 3;
 let livesText;
-let livesIcons = []; // Array to hold life icon sprites
 let invulnerable = false; // Invulnerability flag
 let invulnerabilityDuration = 2000; // 2 seconds of invulnerability
 let lastHitTime = 0;
@@ -49,6 +48,7 @@ let fireDelay = 250;
 let explosions;
 let debris;
 let cookieMode = false;
+let playerSpeed = 160;
 let keyBuffer = [];
 let leaderboard = [];
 let isEnteringName = false;
@@ -67,6 +67,7 @@ let bossShootTimer = 0;
 let bossShootInterval = 60;
 let bossProjectiles;
 let nextBossScore = 300;
+let livesIcons = []; // Initialize as empty array
 
 // Konami code tracking
 let konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight'];
@@ -83,6 +84,13 @@ let bonusTimerText;
 let demoMode = false;
 let demoTimerEvent;
 let demoText;
+
+// Start Screen
+let onStartScreen = false;
+let menuStars = [];
+
+// Easter Egg
+let rpBuffer = [];
 
 function preload() {
     // No assets to preload, we'll draw shapes directly
@@ -314,128 +322,192 @@ function drawBigBird(scene) {
     graphics.destroy();
 }
 
-function toggleCookieMode(scene) {
-    cookieMode = !cookieMode;
 
-    if (!player) return;
-
-    // Update Player
-    player.setTexture(cookieMode ? 'cookie_monster' : 'rocket');
-
-    // Update Gold
-    if (gold) gold.setTexture(cookieMode ? 'cookie' : 'coin');
-
-    // Update Gold Text
-    if (goldText) goldText.setVisible(!cookieMode);
-
-    // Update Enemies
-    if (enemies) {
-        enemies.getChildren().forEach(enemy => {
-            enemy.setTexture(cookieMode ? (enemy.hasTrashCan ? 'oscar' : 'oscar_no_can') : 'spider');
-        });
+function create(data) {
+    if (!audioContext) {
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            gainNode = audioContext.createGain();
+            gainNode.connect(audioContext.destination);
+        } catch (e) {
+            console.warn('AudioContext creation failed:', e);
+        }
     }
-}
 
-function create() {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    gainNode = audioContext.createGain();
-    gainNode.connect(audioContext.destination);
+    // Handle scene restart data
+    if (data && data.isDemo) {
+        demoMode = true;
+        setupGame(this);
+    } else if (data && data.isGame) {
+        demoMode = false;
+        setupGame(this);
+    } else {
+        // Initial load or full reset
 
-    // Create starfield
-    // Moved to startGame
+        // Generate textures
+        drawCookieMonster(this);
+        drawOscar(this);
+        drawOscarNoCan(this);
+        drawCookie(this);
+        drawBanana(this);
+        drawCoin(this);
+        drawBigSpider(this);
+        drawBigBird(this);
 
-    // Generate textures
-    // Generate textures
-    drawCookieMonster(this);
-    drawOscar(this);
-    drawOscarNoCan(this);
-    drawCookie(this);
-    drawBanana(this);
-    drawCoin(this);
-    drawBigSpider(this);
-    drawBigBird(this);
-
-    // Input for mode toggle and name entry
-    this.input.keyboard.on('keydown', function (event) {
-        if (isEnteringName) {
-            if (event.keyCode >= 65 && event.keyCode <= 90) { // A-Z
-                if (entryName.length < 3) {
-                    entryName += event.key.toUpperCase();
+        // Input for mode toggle and name entry
+        this.input.keyboard.on('keydown', function (event) {
+            if (isEnteringName) {
+                if (event.keyCode >= 65 && event.keyCode <= 90) { // A-Z
+                    if (entryName.length < 3) {
+                        entryName += event.key.toUpperCase();
+                        entryText.setText(entryName);
+                        if (entryName.length === 3) {
+                            saveScore(this);
+                        }
+                    }
+                } else if (event.keyCode === 8) { // Backspace
+                    entryName = entryName.slice(0, -1);
                     entryText.setText(entryName);
-                    if (entryName.length === 3) {
+                } else if (event.keyCode === 13) { // Enter
+                    if (entryName.length > 0) {
                         saveScore(this);
                     }
                 }
-            } else if (event.keyCode === 8) { // Backspace
-                entryName = entryName.slice(0, -1);
-                entryText.setText(entryName);
-            } else if (event.keyCode === 13) { // Enter
-                if (entryName.length > 0) {
-                    saveScore(this);
+                return;
+            }
+
+            if (event.key === 'c' || event.key === 's') {
+                keyBuffer.push(event.key);
+                if (keyBuffer.length > 3) keyBuffer.shift();
+
+                if (keyBuffer.join('') === 'ccc' && !cookieMode) {
+                    toggleCookieMode(this);
+                    keyBuffer = [];
+                } else if (keyBuffer.join('') === 'sss' && cookieMode) {
+                    toggleCookieMode(this);
+                    keyBuffer = [];
                 }
             }
-            return;
-        }
 
-        if (event.key === 'c' || event.key === 's') {
-            keyBuffer.push(event.key);
-            if (keyBuffer.length > 3) keyBuffer.shift();
+            // RP Easter Egg detection
+            if (event.key === 'r' || event.key === 'p') {
+                rpBuffer.push(event.key);
+                if (rpBuffer.length > 2) rpBuffer.shift();
 
-            if (keyBuffer.join('') === 'ccc' && !cookieMode) {
-                toggleCookieMode(this);
-                keyBuffer = [];
-            } else if (keyBuffer.join('') === 'sss' && cookieMode) {
-                toggleCookieMode(this);
-                keyBuffer = [];
+                if (rpBuffer.join('') === 'rp') {
+                    showRPFireworks(this);
+                    rpBuffer = [];
+                }
             }
-        }
 
-        // Konami code detection
-        if (event.code === konamiCode[konamiIndex]) {
-            konamiIndex++;
-            if (konamiIndex === konamiCode.length) {
-                // Konami code completed!
-                toggleCookieMode(this);
-                konamiIndex = 0;
-                // Show brief message
-                let codeText = this.add.text(400, 300, 'CODE ACCEPTED!', { fontSize: '48px', fill: '#00ff00' }).setOrigin(0.5);
-                this.time.delayedCall(1000, () => codeText.destroy());
+            // Konami code detection
+            if (event.code === konamiCode[konamiIndex]) {
+                konamiIndex++;
+                if (konamiIndex === konamiCode.length) {
+                    // Konami code completed!
+                    toggleCookieMode(this);
+                    konamiIndex = 0;
+                    // Show brief message
+                    let codeText = this.add.text(400, 300, 'CODE ACCEPTED!', { fontSize: '48px', fill: '#00ff00' }).setOrigin(0.5);
+                    this.time.delayedCall(1000, () => codeText.destroy());
+                }
+            } else {
+                konamiIndex = 0; // Reset if wrong key
             }
-        } else {
-            konamiIndex = 0; // Reset if wrong key
-        }
-    }, this);
+        }, this);
 
-    showStartScreen(this);
+        showStartScreen(this);
+    }
 }
 
+let startGameHandler;
+
 function showStartScreen(scene) {
+    demoMode = false; // Reset demo mode flag
+    onStartScreen = true;
     scene.children.removeAll(); // Clear screen
     loadLeaderboard();
 
-    let titleText = scene.add.text(400, 50, 'HIGH SCORES', { fontSize: '48px', fill: '#ffffff' }).setOrigin(0.5);
+    // Create animated starfield for menu
+    menuStars = [];
+    for (let i = 0; i < 150; i++) {
+        let x = Phaser.Math.Between(0, 800);
+        let y = Phaser.Math.Between(0, 600);
+        let speed = Phaser.Math.FloatBetween(0.5, 3);
+        let size = Phaser.Math.Between(1, 3);
+        let star = scene.add.circle(x, y, size, 0xffffff, Phaser.Math.FloatBetween(0.3, 1));
+        star.speed = speed;
+        menuStars.push(star);
+    }
+
+    // Add decorative border with glow effect
+    let border = scene.add.graphics();
+    border.lineStyle(6, 0x00ffff, 0.8);
+    border.strokeRoundedRect(50, 20, 700, 560, 10);
+    border.lineStyle(3, 0x0088ff, 0.6);
+    border.strokeRoundedRect(55, 25, 690, 550, 10);
+    border.setDepth(100);
+
+    // Add corner decorations
+    for (let corner of [[60, 30], [730, 30], [60, 560], [730, 560]]) {
+        let deco = scene.add.graphics();
+        deco.fillStyle(0x00ffff, 0.6);
+        deco.fillCircle(corner[0], corner[1], 5);
+        deco.setDepth(101);
+
+        // Pulse animation
+        scene.tweens.add({
+            targets: deco,
+            alpha: 0.3,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
+        });
+    }
+
+    let titleText = scene.add.text(400, 60, 'HIGH SCORES', {
+        fontSize: '56px',
+        fill: '#00ffff',
+        fontStyle: 'bold',
+        stroke: '#0088ff',
+        strokeThickness: 4
+    }).setOrigin(0.5).setDepth(102);
 
     // Blink effect for title
     scene.tweens.add({
         targets: titleText,
-        alpha: 0.3,
+        alpha: 0.5,
         duration: 500,
         ease: 'Linear',
         yoyo: true,
         repeat: -1
     });
 
+    // Trophy/medal icons for top 3
+    let medals = ['🥇', '🥈', '🥉'];
     for (let i = 0; i < leaderboard.length; i++) {
         let entry = leaderboard[i];
-        scene.add.text(400, 120 + i * 40, (i + 1) + '. ' + entry.name + ' - ' + entry.score, { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
+        let color = i < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][i] : '#ffffff';
+        let prefix = i < 3 ? medals[i] + ' ' : (i + 1) + '. ';
+
+        scene.add.text(400, 140 + i * 40, prefix + entry.name + ' - ' + entry.score, {
+            fontSize: '28px',
+            fill: color,
+            fontStyle: i < 3 ? 'bold' : 'normal'
+        }).setOrigin(0.5).setDepth(102);
     }
 
-    let startText = scene.add.text(400, 550, 'Press SPACE to start', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
+    let startText = scene.add.text(400, 550, 'Press SPACE to start', {
+        fontSize: '32px',
+        fill: '#00ff00',
+        fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(102);
 
     // Blink effect
     scene.tweens.add({
         targets: startText,
-        alpha: 0,
+        alpha: 0.2,
         duration: 800,
         ease: 'Linear',
         yoyo: true,
@@ -449,15 +521,32 @@ function showStartScreen(scene) {
     });
 
     // Input to start game
-    scene.input.keyboard.once('keydown-SPACE', () => {
+    if (startGameHandler) {
+        scene.input.keyboard.off('keydown-SPACE', startGameHandler);
+        scene.input.keyboard.off('keydown-ENTER', startGameHandler);
+    }
+
+    startGameHandler = () => {
         if (demoTimerEvent) demoTimerEvent.remove();
-        startGame(scene);
-    });
+        onStartScreen = false;
+        scene.input.keyboard.off('keydown-SPACE', startGameHandler);
+        scene.input.keyboard.off('keydown-ENTER', startGameHandler);
+        scene.scene.restart({ isGame: true });
+    };
+
+    scene.input.keyboard.once('keydown-SPACE', startGameHandler);
+    scene.input.keyboard.once('keydown-ENTER', startGameHandler);
 }
 
-function startGame(scene) {
+function setupGame(scene) {
+    onStartScreen = false;
     scene.children.removeAll(); // Clear screen
+    scene.tweens.killAll(); // Kill all tweens
+    scene.input.keyboard.removeAllListeners(); // Clear all input listeners
     isGameRunning = true;
+    konamiIndex = 0; // Reset Konami code progress
+    keyBuffer = []; // Reset key buffer
+    rpBuffer = []; // Reset RP easter egg buffer
 
     // Create starfield
     stars = [];
@@ -470,11 +559,95 @@ function startGame(scene) {
         stars.push(star);
     }
 
+    if (demoMode) {
+        // Add Demo Mode Text
+        demoText = scene.add.text(400, 300, 'DEMO MODE', { fontSize: '64px', fill: '#ff0000', alpha: 0.5 }).setOrigin(0.5);
+        demoText.setDepth(2000);
+
+        // Add instruction to exit
+        let exitText = scene.add.text(400, 500, 'Press SPACE to Start', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
+        exitText.setDepth(2000);
+
+        scene.tweens.add({
+            targets: [demoText, exitText],
+            alpha: 0.2,
+            duration: 1000,
+            ease: 'Linear',
+            yoyo: true,
+            repeat: -1
+        });
+    }
+
     player = drawRocket(scene);
 
     // Set up input keys
     cursors = scene.input.keyboard.createCursorKeys();
     scene.input.keyboard.on('keydown-SPACE', fireBullet, scene);
+
+    // Set up Konami code and mode toggle listener
+    scene.input.keyboard.on('keydown', function (event) {
+        // Name entry for high score
+        if (isEnteringName) {
+            if (event.keyCode >= 65 && event.keyCode <= 90) { // A-Z
+                if (entryName.length < 3) {
+                    entryName += event.key.toUpperCase();
+                    entryText.setText(entryName);
+                    if (entryName.length === 3) {
+                        saveScore(scene);
+                    }
+                }
+            } else if (event.keyCode === 8) { // Backspace
+                entryName = entryName.slice(0, -1);
+                entryText.setText(entryName);
+            } else if (event.keyCode === 13) { // Enter
+                if (entryName.length > 0) {
+                    saveScore(scene);
+                }
+            }
+            return;
+        }
+
+        // CCC/SSS mode toggle
+        if (event.key === 'c' || event.key === 's') {
+            keyBuffer.push(event.key);
+            if (keyBuffer.length > 3) keyBuffer.shift();
+
+            if (keyBuffer.join('') === 'ccc' && !cookieMode) {
+                toggleCookieMode(scene);
+                keyBuffer = [];
+            } else if (keyBuffer.join('') === 'sss' && cookieMode) {
+                toggleCookieMode(scene);
+                keyBuffer = [];
+            }
+        }
+
+        // RP Easter Egg detection
+        if (event.key === 'r' || event.key === 'p') {
+            rpBuffer.push(event.key);
+            if (rpBuffer.length > 2) rpBuffer.shift();
+
+            if (rpBuffer.join('') === 'rp') {
+                showRPFireworks(scene);
+                rpBuffer = [];
+            }
+        }
+
+        // Konami code detection
+        if (event.code === konamiCode[konamiIndex]) {
+            konamiIndex++;
+            if (konamiIndex === konamiCode.length) {
+                // Konami code completed!
+                toggleCookieMode(scene);
+                konamiIndex = 0;
+                // Show brief message
+                let codeText = scene.add.text(400, 300, 'CODE ACCEPTED!', { fontSize: '48px', fill: '#00ff00' }).setOrigin(0.5);
+                codeText.setDepth(2001);
+                scene.time.delayedCall(1000, () => codeText.destroy());
+            }
+        } else {
+            konamiIndex = 0; // Reset if wrong key
+        }
+    });
 
     // Create bullets group
     bullets = scene.physics.add.group({
@@ -515,6 +688,12 @@ function startGame(scene) {
     // Create lives icons instead of text
     updateLivesIcons(scene);
 
+    if (demoMode) {
+        scoreText.setVisible(false);
+        levelText.setVisible(false);
+        livesIcons.forEach(icon => icon.setVisible(false));
+    }
+
     // Set up collisions
     scene.physics.add.overlap(player, gold, collectGold, null, scene);
     scene.physics.add.overlap(player, enemies, hitEnemy, null, scene);
@@ -545,7 +724,11 @@ function startGame(scene) {
 
 function updateLivesIcons(scene) {
     // Clear existing icons
-    livesIcons.forEach(icon => icon.destroy());
+    if (livesIcons) {
+        livesIcons.forEach(icon => {
+            if (icon && icon.active) icon.destroy();
+        });
+    }
     livesIcons = [];
 
     // Create new icons based on current lives
@@ -563,9 +746,21 @@ function updateLivesIcons(scene) {
 }
 
 function update() {
+    // Update menu starfield if on start screen
+    if (onStartScreen) {
+        menuStars.forEach(star => {
+            star.y += star.speed;
+            if (star.y > 600) {
+                star.y = 0;
+                star.x = Phaser.Math.Between(0, 800);
+            }
+        });
+        return;
+    }
+
     if (!isGameRunning) return;
 
-    // Update starfield
+    // Update game starfield
     stars.forEach(star => {
         star.y += star.speed;
         if (star.y > 600) {
@@ -609,11 +804,11 @@ function update() {
 
         // Allow player movement during bonus round
         if (cursors.left.isDown) {
-            player.setVelocityX(-playerSpeed);
+            player.body.setVelocityX(-playerSpeed);
         } else if (cursors.right.isDown) {
-            player.setVelocityX(playerSpeed);
+            player.body.setVelocityX(playerSpeed);
         } else {
-            player.setVelocityX(0);
+            player.body.setVelocityX(0);
         }
 
         // Keep player in bounds
@@ -623,8 +818,13 @@ function update() {
         return; // Skip normal game update
     }
 
+    // Check for Boss Spawn first (priority over bonus round)
+    if (score >= nextBossScore && !bossActive && !bonusRoundActive) {
+        spawnBoss(this);
+    }
+
     // Check for Bonus Round Trigger
-    if (score >= nextBonusScore && !bossActive) {
+    if (score >= nextBonusScore && !bossActive && !bonusRoundActive) {
         startBonusRound(this);
         return;
     }
@@ -644,28 +844,32 @@ function update() {
 
         if (nearestEnemy) {
             if (player.x < nearestEnemy.x - 10) {
-                player.setVelocityX(playerSpeed);
+                player.body.setVelocityX(playerSpeed);
             } else if (player.x > nearestEnemy.x + 10) {
-                player.setVelocityX(-playerSpeed);
+                player.body.setVelocityX(-playerSpeed);
             } else {
-                player.setVelocityX(0);
+                player.body.setVelocityX(0);
                 fireBullet.call(this);
             }
         } else {
             if (player.x < 390) {
-                player.setVelocityX(playerSpeed);
+                player.body.setVelocityX(playerSpeed);
             } else if (player.x > 410) {
-                player.setVelocityX(-playerSpeed);
+                player.body.setVelocityX(-playerSpeed);
             } else {
-                player.setVelocityX(0);
+                player.body.setVelocityX(0);
             }
         }
 
         if (Math.random() < 0.05) fireBullet.call(this);
 
-        if (this.input.keyboard.checkDown(this.input.keyboard.addKey('SPACE'), 1000) ||
+        // Exit Demo Mode on any key
+        let spaceKey = this.input.keyboard.addKey('SPACE');
+        let enterKey = this.input.keyboard.addKey('ENTER');
+        if (Phaser.Input.Keyboard.JustDown(spaceKey) ||
+            Phaser.Input.Keyboard.JustDown(enterKey) ||
             cursors.left.isDown || cursors.right.isDown || cursors.up.isDown || cursors.down.isDown) {
-            resetGame(this);
+            this.scene.restart({ isGame: true });
             return;
         }
     } else {
@@ -690,16 +894,8 @@ function update() {
     // Keep player in bounds
     if (player.x < 25) player.x = 25;
     if (player.x > 775) player.x = 775;
-    if (cursors.left.isDown) {
-        player.body.setVelocityX(-160);
-    } else if (cursors.right.isDown) {
-        player.body.setVelocityX(160);
-    }
-    if (cursors.up.isDown) {
-        player.body.setVelocityY(-160);
-    } else if (cursors.down.isDown) {
-        player.body.setVelocityY(160);
-    }
+    if (player.y < 25) player.y = 25;
+    if (player.y > 575) player.y = 575;
 
     // Update enemy movement
     enemies.getChildren().forEach(enemy => {
@@ -718,11 +914,7 @@ function update() {
         }
     });
 
-    // Boss logic
-    if (score >= nextBossScore && !bossActive) {
-        spawnBoss(this);
-    }
-
+    // Boss movement and shooting logic
     if (bossActive && boss && boss.active) {
         // Move boss horizontally
         boss.x += bossSpeed * bossDirection;
@@ -821,6 +1013,14 @@ function fireBullet() {
             if (cookieMode) {
                 bullet.setTexture('banana');
             } else {
+                // Ensure bullet texture exists
+                if (!this.textures.exists('bullet')) {
+                    let graphics = this.add.graphics();
+                    graphics.fillStyle(0xffff00, 1);
+                    graphics.fillRect(0, 0, 5, 10);
+                    graphics.generateTexture('bullet', 5, 10);
+                    graphics.destroy();
+                }
                 bullet.setTexture('bullet');
             }
 
@@ -885,6 +1085,7 @@ function hitEnemyWithBullet(bullet, enemy) {
 }
 
 function playExplosionSound() {
+    if (!audioContext || !gainNode) return;
     // Generate white noise
     let bufferSize = audioContext.sampleRate * 0.5; // 0.5 seconds
     let buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
@@ -925,6 +1126,7 @@ function createDebris(scene, x, y) {
 }
 
 function playTone(frequency, duration) {
+    if (!audioContext || !gainNode) return;
     let osc = audioContext.createOscillator();
     osc.frequency.setValueAtTime(frequency, audioContext.currentTime);
     osc.connect(gainNode);
@@ -937,6 +1139,7 @@ function playTone(frequency, duration) {
 }
 
 function playCollectSound() {
+    if (!audioContext || !gainNode) return;
     // Rising tone for coin collection
     let osc = audioContext.createOscillator();
     osc.type = 'square'; // 8-bit square wave
@@ -951,6 +1154,7 @@ function playCollectSound() {
 }
 
 function playHitSound() {
+    if (!audioContext || !gainNode) return;
     // Harsh descending tone for damage
     let osc = audioContext.createOscillator();
     osc.type = 'sawtooth'; // Harsh 8-bit sound
@@ -965,6 +1169,7 @@ function playHitSound() {
 }
 
 function playShootSound() {
+    if (!audioContext || !gainNode) return;
     // Quick high-pitched beep for shooting
     let osc = audioContext.createOscillator();
     osc.type = 'square';
@@ -978,6 +1183,7 @@ function playShootSound() {
 }
 
 function playDeathSound() {
+    if (!audioContext || !gainNode) return;
     // Classic descending death sound (Space Invaders style)
     let osc = audioContext.createOscillator();
     osc.type = 'sawtooth';
@@ -1015,6 +1221,9 @@ function toggleCookieMode(scene) {
     enemies.getChildren().forEach(enemy => {
         enemy.setTexture(cookieMode ? (enemy.hasTrashCan ? 'oscar' : 'oscar_no_can') : 'spider');
     });
+
+    // Update Lives Icons
+    updateLivesIcons(scene);
 }
 
 function spawnBoss(scene) {
@@ -1059,7 +1268,9 @@ function hitBossWithBullet(bullet, boss) {
             }
 
             score += 20;
-            lives += 1;
+            if (lives < 4) {  // Cap lives at 4
+                lives += 1;
+            }
             scoreText.setText('Score: ' + score);
             updateLivesIcons(this);
 
@@ -1068,6 +1279,7 @@ function hitBossWithBullet(bullet, boss) {
             bossActive = false;
             bossProjectiles.clear(true, true);  // Clear all boss projectiles
             nextBossScore += 300;  // Next boss at +300 points
+            bossMaxHp += 5;  // Each boss gets 5 more HP
         }
     }
 }
@@ -1189,12 +1401,66 @@ function checkHighScore(scene) {
     loadLeaderboard();
     if (leaderboard.length < 10 || score > leaderboard[leaderboard.length - 1].score) {
         // High Score!
+        onStartScreen = true;
         isEnteringName = true;
         entryName = "";
 
-        scene.add.text(400, 200, 'New High Score!', { fontSize: '48px', fill: '#ffffff' }).setOrigin(0.5);
-        scene.add.text(400, 300, 'Enter Initials:', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
-        entryText = scene.add.text(400, 400, '', { fontSize: '64px', fill: '#ffff00' }).setOrigin(0.5);
+        // Create animated starfield
+        menuStars = [];
+        for (let i = 0; i < 150; i++) {
+            let x = Phaser.Math.Between(0, 800);
+            let y = Phaser.Math.Between(0, 600);
+            let speed = Phaser.Math.FloatBetween(0.5, 3);
+            let size = Phaser.Math.Between(1, 3);
+            let star = scene.add.circle(x, y, size, 0xffffff, Phaser.Math.FloatBetween(0.3, 1));
+            star.speed = speed;
+            menuStars.push(star);
+        }
+
+        // Add decorative border
+        let border = scene.add.graphics();
+        border.lineStyle(6, 0xffff00, 0.8);
+        border.strokeRoundedRect(50, 100, 700, 400, 10);
+        border.lineStyle(3, 0xffaa00, 0.6);
+        border.strokeRoundedRect(55, 105, 690, 390, 10);
+        border.setDepth(100);
+
+        let titleText = scene.add.text(400, 200, 'NEW HIGH SCORE!', {
+            fontSize: '56px',
+            fill: '#ffff00',
+            fontStyle: 'bold',
+            stroke: '#ffaa00',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(102);
+
+        // Pulse effect
+        scene.tweens.add({
+            targets: titleText,
+            scale: 1.1,
+            duration: 500,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
+        });
+
+        scene.add.text(400, 280, 'Your Score: ' + score, {
+            fontSize: '36px',
+            fill: '#ffffff',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(102);
+
+        scene.add.text(400, 340, 'Enter Initials:', {
+            fontSize: '32px',
+            fill: '#00ffff'
+        }).setOrigin(0.5).setDepth(102);
+
+        entryText = scene.add.text(400, 420, '', {
+            fontSize: '64px',
+            fill: '#ffff00',
+            fontStyle: 'bold',
+            stroke: '#ffaa00',
+            strokeThickness: 3
+        }).setOrigin(0.5).setDepth(102);
     } else {
         showLeaderboard(scene);
     }
@@ -1214,21 +1480,91 @@ function saveScore(scene) {
 }
 
 function showLeaderboard(scene) {
+    onStartScreen = true;
     scene.children.removeAll(); // Clear screen
 
-    scene.add.text(400, 50, 'Leaderboard', { fontSize: '48px', fill: '#ffffff' }).setOrigin(0.5);
-
-    for (let i = 0; i < leaderboard.length; i++) {
-        let entry = leaderboard[i];
-        scene.add.text(400, 120 + i * 40, (i + 1) + '. ' + entry.name + ' - ' + entry.score, { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
+    // Create animated starfield
+    menuStars = [];
+    for (let i = 0; i < 150; i++) {
+        let x = Phaser.Math.Between(0, 800);
+        let y = Phaser.Math.Between(0, 600);
+        let speed = Phaser.Math.FloatBetween(0.5, 3);
+        let size = Phaser.Math.Between(1, 3);
+        let star = scene.add.circle(x, y, size, 0xffffff, Phaser.Math.FloatBetween(0.3, 1));
+        star.speed = speed;
+        menuStars.push(star);
     }
 
-    pressAnyKeyText = scene.add.text(400, 550, 'Press any key to play again', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
+    // Add decorative border
+    let border = scene.add.graphics();
+    border.lineStyle(6, 0xff00ff, 0.8);
+    border.strokeRoundedRect(50, 20, 700, 560, 10);
+    border.lineStyle(3, 0xff0088, 0.6);
+    border.strokeRoundedRect(55, 25, 690, 550, 10);
+    border.setDepth(100);
+
+    // Add corner decorations
+    for (let corner of [[60, 30], [730, 30], [60, 560], [730, 560]]) {
+        let deco = scene.add.graphics();
+        deco.fillStyle(0xff00ff, 0.6);
+        deco.fillCircle(corner[0], corner[1], 5);
+        deco.setDepth(101);
+
+        scene.tweens.add({
+            targets: deco,
+            alpha: 0.3,
+            duration: 1000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
+        });
+    }
+
+    scene.add.text(400, 60, 'GAME OVER', {
+        fontSize: '56px',
+        fill: '#ff00ff',
+        fontStyle: 'bold',
+        stroke: '#ff0088',
+        strokeThickness: 4
+    }).setOrigin(0.5).setDepth(102);
+
+    // Trophy/medal icons for top 3
+    let medals = ['🥇', '🥈', '🥉'];
+    for (let i = 0; i < leaderboard.length; i++) {
+        let entry = leaderboard[i];
+        let color = i < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][i] : '#ffffff';
+        let prefix = i < 3 ? medals[i] + ' ' : (i + 1) + '. ';
+
+        scene.add.text(400, 140 + i * 40, prefix + entry.name + ' - ' + entry.score, {
+            fontSize: '28px',
+            fill: color,
+            fontStyle: i < 3 ? 'bold' : 'normal'
+        }).setOrigin(0.5).setDepth(102);
+    }
+
+    pressAnyKeyText = scene.add.text(400, 550, 'Press any key to play again', {
+        fontSize: '32px',
+        fill: '#00ff00',
+        fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(102);
+
+    // Blink effect
+    scene.tweens.add({
+        targets: pressAnyKeyText,
+        alpha: 0.2,
+        duration: 800,
+        ease: 'Linear',
+        yoyo: true,
+        repeat: -1
+    });
 
     // Small delay before allowing restart to prevent accidental skips
     scene.time.delayedCall(1000, () => {
         scene.input.keyboard.on('keydown', () => {
-            if (!isEnteringName) resetGame(scene);
+            if (!isEnteringName) {
+                onStartScreen = false;
+                resetGame(scene);
+            }
         });
     });
 }
@@ -1271,11 +1607,16 @@ function endBonusRound(scene) {
 
     nextBonusScore += 1000;
 
-    // Force spawn a few enemies to restart action immediately
-    for (let i = 0; i < level + 2; i++) {
-        let enemy = enemies.create(Phaser.Math.Between(0, 800), Phaser.Math.Between(-200, 0), cookieMode ? 'oscar' : 'spider');
-        enemy.setVelocityY(enemySpeed);
-        enemy.hasTrashCan = true;
+    // Check if we should spawn a boss after bonus round
+    if (score >= nextBossScore && !bossActive) {
+        spawnBoss(scene);
+    } else {
+        // Force spawn a few enemies to restart action immediately
+        for (let i = 0; i < level + 2; i++) {
+            let enemy = enemies.create(Phaser.Math.Between(0, 800), Phaser.Math.Between(-200, 0), cookieMode ? 'oscar' : 'spider');
+            enemy.setVelocityY(enemySpeed);
+            enemy.hasTrashCan = true;
+        }
     }
 }
 
@@ -1293,21 +1634,114 @@ function collectBonusCoin(player, coin) {
 }
 
 function startDemoMode(scene) {
-    demoMode = true;
-    startGame(scene);
+    onStartScreen = false;
+    scene.scene.restart({ isDemo: true });
+}
 
-    // Add Demo Mode Text
-    demoText = scene.add.text(400, 100, 'DEMO MODE', { fontSize: '48px', fill: '#ff0000' }).setOrigin(0.5);
-    demoText.setDepth(2000);
+function showRPFireworks(scene) {
+    // Define R and P letter shapes using coordinate points
+    const rPoints = [
+        // Vertical line
+        [0, 0], [0, 10], [0, 20], [0, 30], [0, 40], [0, 50],
+        // Top horizontal
+        [10, 0], [20, 0], [30, 0],
+        // Top curve
+        [40, 10], [40, 20],
+        // Middle horizontal
+        [30, 25], [20, 25], [10, 25],
+        // Diagonal leg
+        [15, 35], [20, 40], [25, 45], [30, 50]
+    ];
 
-    scene.tweens.add({
-        targets: demoText,
-        alpha: 0,
-        duration: 500,
-        ease: 'Linear',
-        yoyo: true,
-        repeat: -1
+    const pPoints = [
+        // Vertical line
+        [0, 0], [0, 10], [0, 20], [0, 30], [0, 40], [0, 50],
+        // Top horizontal
+        [10, 0], [20, 0], [30, 0],
+        // Top curve
+        [40, 10], [40, 20],
+        // Bottom curve back
+        [30, 25], [20, 25], [10, 25]
+    ];
+
+    const colors = [0xff0000, 0xff6600, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0xff00ff, 0xff0088];
+
+    // Draw R at position (150, 200)
+    rPoints.forEach((point, index) => {
+        scene.time.delayedCall(index * 30, () => {
+            let color = colors[Math.floor(Math.random() * colors.length)];
+            createFireworkParticle(scene, 150 + point[0] * 3, 200 + point[1] * 3, color);
+        });
     });
+
+    // Draw P at position (350, 200) with delay
+    pPoints.forEach((point, index) => {
+        scene.time.delayedCall(index * 30 + 500, () => {
+            let color = colors[Math.floor(Math.random() * colors.length)];
+            createFireworkParticle(scene, 350 + point[0] * 3, 200 + point[1] * 3, color);
+        });
+    });
+
+    // Show message
+    let easterEggText = scene.add.text(400, 500, 'RAMI PINKU!', {
+        fontSize: '48px',
+        fill: '#ffff00',
+        fontStyle: 'bold',
+        stroke: '#ff6600',
+        strokeThickness: 4
+    }).setOrigin(0.5).setDepth(3000);
+
+    // Pulse animation
+    scene.tweens.add({
+        targets: easterEggText,
+        scale: 1.2,
+        duration: 300,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: 5,
+        onComplete: () => {
+            easterEggText.destroy();
+        }
+    });
+}
+
+function createFireworkParticle(scene, x, y, color) {
+    // Create main burst particle
+    let particle = scene.add.circle(x, y, 8, color).setDepth(2500);
+
+    // Sparkle effect
+    scene.tweens.add({
+        targets: particle,
+        scale: 1.5,
+        alpha: 0,
+        duration: 1000,
+        ease: 'Power2',
+        onComplete: () => particle.destroy()
+    });
+
+    // Create small explosions around the main particle
+    for (let i = 0; i < 8; i++) {
+        let angle = (i / 8) * Math.PI * 2;
+        let distance = Phaser.Math.Between(20, 40);
+        let sparkX = x + Math.cos(angle) * distance;
+        let sparkY = y + Math.sin(angle) * distance;
+
+        let spark = scene.add.circle(x, y, 3, color).setDepth(2500);
+
+        scene.tweens.add({
+            targets: spark,
+            x: sparkX,
+            y: sparkY,
+            alpha: 0,
+            scale: 0.5,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => spark.destroy()
+        });
+    }
+
+    // Play a tone for each firework
+    playTone(Phaser.Math.Between(400, 800), 100);
 }
 
 function startCountdown(scene) {
@@ -1337,6 +1771,11 @@ function resetGame(scene) {
     invulnerable = false;
     enemySpeed = 100;
     isEnteringName = false;
+    nextBossScore = 300; // Reset boss spawn threshold
+    bossMaxHp = 10; // Reset boss max HP
+    konamiIndex = 0; // Reset Konami code progress
+    keyBuffer = []; // Reset key buffer
+    rpBuffer = []; // Reset RP easter egg buffer
 
     // Restart scene properly to reset everything
     scene.scene.restart();

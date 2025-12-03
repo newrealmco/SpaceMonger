@@ -1,39 +1,28 @@
-# Space Monger!
+# Space Monger
 
-Space Monger is a Python game where you pilot a starship in pursuit of gold! Collect as many gold coins as you can and avoid the enemy spider spaceships. Will you be able to complete all 10 levels and become the richest and best space pilot in the galaxy?
-
-## How to Play
-- Use the arrow keys to move your spaceship.
-- Collect gold coins to increase your score.
-- Avoid enemy spider spaceships to stay alive.
-- Progress through levels as you collect more gold.
-
-## Requirements
-- Python 3.x
-- Pygame
-- web browser for the JS version
-
-## Installation
-1. Clone the repository:
-   ```sh
-   git clone https://github.com/yourusername/SpaceMonger.git
-2. Navigate to the project directory:
-   ```sh
-   cd SpaceMonger
-3. Install the required dependencies:
-   ```sh
-   pip install pygame
-4. Run the game:
-   ```sh
-   python space_monger.py
-   
-or open index.html to play the js version
+A retro 70s/80s style arcade space shooter game built with JavaScript and Phaser.js.
 
 ## Features
-* Ten challenging levels with increasing difficulty.
-* Collectible gold coins with a dollar sign.
-* Enemy spider spaceships with varying behaviors.
-* Level-up indications and lives are displayed as blue squares.
 
-*Enjoy playing Space Monger!*
-   
+- **Classic Arcade Action**: Shoot enemies, collect coins, and survive!
+- **Two Game Modes**:
+  - **Space Mode**: Pilot a rocket ship and fight spiders.
+  - **Cookie Mode**: Play as Cookie Monster, shoot bananas, and fight Oscars! (Unlock with Konami Code: ↑↑↓↓←→←→)
+- **Boss Battles**: Fight big bosses every 300 points.
+- **Bonus Rounds**: Collect falling coins every 1000 points.
+- **Retro Aesthetics**: Scanlines, 8-bit sounds, screen shake, and more.
+
+## How to Play
+
+- **Arrow Keys**: Move
+- **SPACE**: Shoot
+- **Konami Code**: Enter ↑↑↓↓←→←→ on the start screen to toggle Cookie Mode.
+
+## Development
+
+This game is built using:
+- [Phaser 3](https://phaser.io/) - HTML5 Game Framework
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
