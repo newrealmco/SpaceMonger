@@ -1046,6 +1046,8 @@ function hitEnemyWithBullet(bullet, enemy) {
             if (enemy.hasTrashCan) {
                 enemy.hasTrashCan = false;
                 enemy.setTexture('oscar_no_can');
+                // Make Oscar drop faster when he loses his trash can
+                enemy.body.setVelocityY(enemy.body.velocity.y * 1.5);
                 score += 5;
                 scoreText.setText('Score: ' + score);
 
